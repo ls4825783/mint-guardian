@@ -1,0 +1,605 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<meta name="description" content="Mint Guardian is a verification-first registry for Agent ID free mints on BNB Smart Chain: 40 receipt-verified reports (30 safe, 9 risky, 1 scam), a live Agent ID checker that reads BSC directly, and an on-chain registry contract verified on BscScan (Exact Match)." />
+<meta property="og:title" content="Agent ID Mint Guardian" />
+<meta property="og:description" content="Which Agent ID mints are actually safe? 40 receipt-verified reports, a live BSC Agent ID checker, and an on-chain registry gated to Agent ID holders." />
+<meta property="og:type" content="website" />
+<link rel="icon" href="data:," />
+<title>Agent ID Mint Guardian</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#f4f5f3; --surface:#ffffff; --surface2:#eceee9; --ink:#131613; --muted:#5c665c; --line:#dde0d8;
+    --yellow:#f0b90b; --yellow-ink:#1a1600; --safe:#0e7c4a; --safe-bg:#e3f3ea; --risky:#9a6a12; --risky-bg:#fbf0d3;
+    --scam:#b42318; --scam-bg:#fdecea; --focus:#0e7c4a; --shadow:0 1px 2px rgba(16,20,16,.06),0 8px 24px rgba(16,20,16,.06);
+    color-scheme:light;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0e100e; --surface:#171a17; --surface2:#20241f; --ink:#eef0ea; --muted:#a3ada1; --line:#2b302a;
+      --safe-bg:#123626; --risky-bg:#3a2f10; --scam-bg:#3d1713; --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);
+      color-scheme:dark;
+    }
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:"Manrope",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;line-height:1.55;-webkit-font-smoothing:antialiased}
+  a{color:inherit}
+  .mono{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.82em;word-break:break-all}
+  .wrap{max-width:1060px;margin:0 auto;padding:0 16px 64px}
+  /* Toolbar — controls only, not a title bar */
+  .toolbar{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 88%, transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+  .toolbar-in{max-width:1060px;margin:0 auto;padding:10px 16px;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+  .toolbar .left{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .pill{display:inline-flex;align-items:center;gap:7px;padding:7px 11px;border:1px solid var(--line);border-radius:999px;background:var(--surface);font-size:.82rem;font-weight:700}
+  .dot{width:8px;height:8px;border-radius:50%;background:#9aa39a;flex:none}
+  .dot.live{background:var(--safe)} .dot.err{background:var(--scam)}
+  button,.btn{min-height:44px}
+  .btn{appearance:none;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;padding:10px 16px;font:inherit;font-weight:800;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;text-decoration:none}
+  .btn:active{transform:translateY(1px)}
+  .btn.primary{background:var(--yellow);border-color:#d9a406;color:var(--yellow-ink)}
+  .btn.safe{background:var(--safe);border-color:var(--safe);color:#fff}
+  .btn:disabled{opacity:.55;cursor:not-allowed;transform:none}
+  .btn.small{min-height:38px;padding:7px 12px;font-size:.88rem;border-radius:8px}
+  /* Hero */
+  .hero{padding:30px 0 8px}
+  .hero h1{font-size:clamp(1.9rem,5.2vw,3.1rem);line-height:1.04;letter-spacing:-.03em;margin:0 0 12px;max-width:16ch;font-weight:800}
+  .hero h1 em{font-style:normal;box-shadow:inset 0 -.42em 0 var(--yellow)}
+  .hero p.lede{font-size:1.06rem;color:var(--muted);max-width:62ch;margin:0 0 18px}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:18px 0 6px}
+  .stat{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;box-shadow:var(--shadow)}
+  .stat b{font-size:1.7rem;line-height:1;display:block;letter-spacing:-.02em}
+  .stat span{font-size:.82rem;color:var(--muted);font-weight:700}
+  .stat.safe b{color:var(--safe)} .stat.risky b{color:var(--risky)} .stat.scam b{color:var(--scam)}
+  /* Cards / sections */
+  section{margin-top:26px}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:20px;box-shadow:var(--shadow)}
+  h2{font-size:1.35rem;letter-spacing:-.02em;margin:0 0 6px;line-height:1.2}
+  h3{margin:0 0 6px;font-size:1.02rem}
+  .sub{color:var(--muted);margin:0 0 16px;font-size:.95rem}
+  .notice{border-radius:12px;padding:14px 16px;font-weight:700;border:1px solid var(--line);background:var(--risky-bg);color:var(--ink)}
+  .notice.live{background:var(--safe-bg)}
+  .notice strong{display:block}
+  .notice p{margin:4px 0 0;font-weight:600;color:var(--muted)}
+  label{font-weight:800;font-size:.88rem;display:block;margin:14px 0 6px}
+  label:first-of-type{margin-top:0}
+  input,select,textarea{width:100%;min-height:48px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);padding:11px 12px;font:inherit}
+  textarea{min-height:88px;resize:vertical}
+  input:focus,select:focus,textarea:focus,button:focus-visible,a:focus-visible{outline:3px solid color-mix(in srgb,var(--focus) 45%, transparent);outline-offset:1px}
+  .row{display:flex;gap:10px;flex-wrap:wrap} .row>*{flex:1}
+  .row .btn{flex:0 0 auto}
+  .result{margin-top:14px;border-radius:12px;padding:14px 16px;border:1px solid var(--line);display:none}
+  .result.show{display:block}
+  .result.holder{background:var(--safe-bg);border-color:color-mix(in srgb,var(--safe) 35%, var(--line))}
+  .result.not{background:var(--surface2)}
+  .result.error{background:var(--scam-bg)}
+  .result b.big{font-size:1.05rem}
+  .kv{display:grid;grid-template-columns:150px 1fr;gap:6px 12px;margin-top:10px;font-size:.92rem}
+  .kv dt{color:var(--muted);font-weight:700} .kv dd{margin:0}
+  /* Filters */
+  .filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+  .chip{appearance:none;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:9px 14px;min-height:40px;font:inherit;font-weight:800;cursor:pointer;font-size:.9rem}
+  .chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+  .search{flex:1;min-width:200px}
+  .search input{min-height:44px}
+  /* Reports */
+  .reports{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .report{border:1px solid var(--line);border-radius:12px;padding:16px;background:var(--surface);display:flex;flex-direction:column;gap:9px}
+  .report-top{display:flex;gap:8px;align-items:flex-start;justify-content:space-between}
+  .report h3{font-size:1.08rem;letter-spacing:-.01em}
+  .badges{display:flex;gap:6px;flex-wrap:wrap;flex:none}
+  .badge{font-size:.72rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;padding:4px 8px;border-radius:999px;border:1px solid var(--line)}
+  .badge.safe{background:var(--safe-bg);color:var(--safe)} .badge.risky{background:var(--risky-bg);color:var(--risky)} .badge.scam{background:var(--scam-bg);color:var(--scam)}
+  .badge.seed{background:var(--surface2);color:var(--muted)} .badge.registry{background:var(--ink);color:var(--bg)}
+  .badge.lottery{background:#fff3c4;color:#6b5200;border-color:#e3cf7a}
+  @media (prefers-color-scheme: dark){.badge.lottery{background:#3a2f10;color:#f5d76a}}
+  .reason{margin:0;color:var(--ink);font-size:.94rem;overflow-wrap:anywhere}
+  .meta{font-size:.86rem;color:var(--muted);display:grid;gap:4px;overflow-wrap:anywhere}
+  .meta a{font-weight:700;text-decoration:underline;text-underline-offset:2px}
+  .report-foot{margin-top:auto;padding-top:6px;border-top:1px dashed var(--line);display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+  .endorse-note{font-size:.8rem;color:var(--muted);max-width:34ch}
+  .empty{padding:28px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:12px;background:var(--surface)}
+  /* Steps */
+  .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  .step{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .step .n{width:30px;height:30px;border-radius:50%;background:var(--yellow);color:var(--yellow-ink);display:grid;place-items:center;font-weight:800;margin-bottom:10px}
+  .step p{margin:0;color:var(--muted);font-size:.93rem}
+  .fine{font-size:.86rem;color:var(--muted)}
+  .status-msg{margin-top:12px;font-weight:700;display:none}
+  .status-msg.show{display:block}
+  footer{margin-top:34px;border-top:1px solid var(--line);padding-top:18px;color:var(--muted);font-size:.9rem}
+  footer a{font-weight:700}
+  @media (max-width:760px){
+    .stats{grid-template-columns:1fr 1fr}
+    .reports,.steps{grid-template-columns:1fr}
+    .kv{grid-template-columns:1fr} .kv dd{margin-bottom:4px}
+    .hero{padding-top:22px}
+    .row .btn{flex:1}
+  }
+  @media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="toolbar-in">
+    <div class="left">
+      <span class="pill"><span class="dot" id="rpcDot"></span><span id="rpcStatus">BSC RPC: connecting…</span></span>
+      <span class="pill" id="walletPill">No wallet connected</span>
+    </div>
+    <button class="btn primary" id="connectBtn" type="button">Connect wallet</button>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <header class="hero">
+    <h1>Which Agent ID mints are <em>actually safe</em>?</h1>
+    <p class="lede">Mint Guardian is a verification-first registry for Agent ID free mints on BNB Smart Chain. Safe verdicts passed three gates — contract verification, audit risk, and a clean value-0 preview — before anyone minted.</p>
+    <p class="lede">The one exception is flagged inside its own report: THE WALL was taken as a one-time manual override on an unverified contract and is labelled higher-risk. Risky and scam entries were never minted at all. No payments, no token, no minting here: registry and reports only.</p>
+    <div class="stats" aria-label="Report summary">
+      <div class="stat"><b id="statTotal">40</b><span>reports listed</span></div>
+      <div class="stat safe"><b id="statSafe">30</b><span>safe verdicts (1 flagged override)</span></div>
+      <div class="stat risky"><b id="statRisky">9</b><span>risky — skipped</span></div>
+      <div class="stat scam"><b id="statScam">1</b><span>scam — do not interact</span></div>
+    </div>
+  </header>
+
+  <!-- ============ AGENT ID CHECKER (core live read) ============ -->
+  <section aria-labelledby="checker-h">
+    <div class="card">
+      <h2 id="checker-h">Check an Agent ID — live from BSC</h2>
+      <p class="sub">Agent ID is an ERC-721 on BSC mainnet (<a class="mono" href="https://bscscan.com/address/0x60B9262456dE011F7d15a54CdD8c48bAaa8B022F" target="_blank" rel="noopener">0x60B926…8B022F</a>). A wallet holds one when <span class="mono">balanceOf(wallet) &gt; 0</span>. This check reads BSC directly through a public RPC — no wallet connection needed. Connect a wallet and your own address is checked automatically.</p>
+
+      <label for="checkAddress">Wallet address to check</label>
+      <div class="row">
+        <input id="checkAddress" inputmode="text" autocomplete="off" spellcheck="false" placeholder="0x… paste any BSC address" />
+        <button class="btn safe" id="checkBtn" type="button">Check live on BSC</button>
+      </div>
+
+      <div class="result" id="checkResult" role="status" aria-live="polite"></div>
+
+      <p class="fine" style="margin:14px 0 0">Reads use the BSC public RPC (<span class="mono">bsc-dataseed.binance.org</span>, chain 56). Nothing is sent or signed for a check — it is a read-only <span class="mono">eth_call</span>.</p>
+    </div>
+  </section>
+
+  <!-- ============ REGISTRY STATUS ============ -->
+  <section aria-labelledby="registry-h">
+    <div class="notice" id="registryNotice">
+      <strong id="registry-h">On-chain registry status</strong>
+      <p id="registryNoticeText">MintGuardian registry is live on BSC mainnet at <a class="mono" href="https://bscscan.com/address/0xEF4318fB3fDc9de236E8Fdc9C1Bdd2AA67e272F2" target="_blank" rel="noopener">0xEF4318fB3fDc9de236E8Fdc9C1Bdd2AA67e272F2</a> — on-chain reports are read directly from the contract, alongside the curated seed history. Deploy tx: <a class="mono" href="https://bscscan.com/tx/0x0974b1a88a0a5a707dc90e89a7b38ae3d083ed9bf96d12b495787d5125b8ac81" target="_blank" rel="noopener">0x0974b1…b8ac81</a>. Source code <a href="https://bscscan.com/address/0xEF4318fB3fDc9de236E8Fdc9C1Bdd2AA67e272F2#code" target="_blank" rel="noopener">verified on BscScan — Exact Match</a>.</p>
+    </div>
+  </section>
+
+  <!-- ============ REPORTS ============ -->
+  <section aria-labelledby="reports-h">
+    <h2 id="reports-h">Verified-mint reports</h2>
+    <p class="sub">Entries marked <strong>Curated seed</strong> come from our receipt-verified mint history (Nov 2026). Entries marked <strong>On-chain registry</strong> are read live from the MintGuardian contract. When a seed report has also been recorded on-chain, the two merge into a single On-chain registry entry — each project is listed once. Where a report links a transaction, that mint receipt is the evidence — open it on BscScan and check it yourself. Tokens with no DEX pool yet are labelled <strong>lottery tickets</strong>: pre-liquidity, value unproven, never a promise of returns.</p>
+
+    <div class="filters">
+      <button class="chip" type="button" data-filter="all" aria-pressed="true">All</button>
+      <button class="chip" type="button" data-filter="safe" aria-pressed="false">Safe</button>
+      <button class="chip" type="button" data-filter="risky" aria-pressed="false">Risky</button>
+      <button class="chip" type="button" data-filter="scam" aria-pressed="false">Scam</button>
+      <div class="search"><input id="searchInput" type="search" placeholder="Search by name or contract address…" aria-label="Search reports" /></div>
+    </div>
+
+    <p class="fine" id="resultCount" aria-live="polite"></p>
+    <div class="reports" id="reportsList"></div>
+    <div class="empty" id="reportsEmpty" hidden>No reports match that filter. Try “All” or clear the search.</div>
+  </section>
+
+  <!-- ============ SUBMIT ============ -->
+  <section aria-labelledby="submit-h">
+    <div class="card">
+      <h2 id="submit-h">Submit a report</h2>
+      <p class="sub">Only Agent ID holders can submit or endorse on-chain — that gate is enforced by the MintGuardian contract itself (<span class="mono">isAgentHolder</span>), not just by this page. Your report needs the mint contract, a verdict, and evidence anyone can verify.</p>
+
+      <form id="submitForm">
+        <label for="fContract">Mint contract address</label>
+        <input id="fContract" placeholder="0x…" autocomplete="off" spellcheck="false" />
+        <div class="row">
+          <div>
+            <label for="fName">Project name</label>
+            <input id="fName" placeholder="e.g. PXIO Miners" />
+          </div>
+          <div>
+            <label for="fVerdict">Verdict</label>
+            <select id="fVerdict">
+              <option value="0">Safe — verified, clean preview, value 0</option>
+              <option value="1">Risky — unverified, paid, or audit flags</option>
+              <option value="2">Scam — do not interact</option>
+            </select>
+          </div>
+        </div>
+        <label for="fEvidence">Evidence URI / reason</label>
+        <textarea id="fEvidence" placeholder="BscScan tx link, Sourcify result, audit level, and why this verdict — be specific."></textarea>
+
+        <div class="row" style="margin-top:16px;align-items:center">
+          <button class="btn primary" id="submitBtn" type="submit" disabled>Submit report on-chain</button>
+          <span class="fine" id="submitGateNote">Registry is live on BSC. Connect a BSC wallet holding an Agent ID to submit.</span>
+        </div>
+        <p class="status-msg" id="submitStatus" role="status" aria-live="polite"></p>
+      </form>
+    </div>
+  </section>
+
+  <!-- ============ HOW IT WORKS ============ -->
+  <section aria-labelledby="how-h">
+    <h2 id="how-h">How a mint earns a “safe” verdict</h2>
+    <p class="sub">The three gates behind a standard safe verdict. A mint that fails any gate is listed as risky or skipped — never quietly promoted. The single historical exception, THE WALL, is named as an override in its own report rather than hidden.</p>
+    <div class="steps">
+      <div class="step"><div class="n">1</div><h3>Contract verified</h3><p>The mint contract must be verified on Sourcify (exact match) with readable source. Unverified contracts are an automatic reject, however good the audit looks.</p></div>
+      <div class="step"><div class="n">2</div><h3>Audit risk LOW</h3><p>The Binance / security audit must come back LOW with no drainer patterns, hidden mint authority, or non-standard token behaviour. MID or worse does not pass.</p></div>
+      <div class="step"><div class="n">3</div><h3>Clean value-0 preview</h3><p>The mint transaction is simulated first: price must be 0 on-chain, no token approvals, no authority changes. Only then is it minted — and the receipt becomes the report’s evidence.</p></div>
+    </div>
+  </section>
+
+  <footer>
+    <p><strong>Contracts.</strong> Agent ID (ERC-721): <a class="mono" href="https://bscscan.com/address/0x60B9262456dE011F7d15a54CdD8c48bAaa8B022F" target="_blank" rel="noopener">0x60B9262456dE011F7d15a54CdD8c48bAaa8B022F</a> · MintGuardian registry: <a class="mono" id="footerGuardian" href="https://bscscan.com/address/0xEF4318fB3fDc9de236E8Fdc9C1Bdd2AA67e272F2" target="_blank" rel="noopener">0xEF4318fB3fDc9de236E8Fdc9C1Bdd2AA67e272F2</a> (deployed on BSC mainnet, <a href="https://bscscan.com/tx/0x0974b1a88a0a5a707dc90e89a7b38ae3d083ed9bf96d12b495787d5125b8ac81" target="_blank" rel="noopener">deploy tx</a>; source <a href="https://bscscan.com/address/0xEF4318fB3fDc9de236E8Fdc9C1Bdd2AA67e272F2#code" target="_blank" rel="noopener">verified on BscScan — Exact Match</a>).</p>
+    <p><strong>Honest limits.</strong> A “safe” verdict means the checks above passed at the time of the report — it is not financial advice and not a guarantee. Pre-liquidity tokens are lottery tickets and may never gain value. Always open the evidence link and verify before you interact with any contract.</p>
+    <p>Built for the Binance Wallet × BNB Chain Agent ID Hackathon. Reads work without a wallet; writes (submit / endorse) require a connected BSC wallet holding an Agent ID.</p>
+  </footer>
+
+</div>
+
+<script>
+"use strict";
+/* ================= CONFIG — edit this one constant after deployment ================= */
+var MINT_GUARDIAN_ADDRESS = "0xEF4318fB3fDc9de236E8Fdc9C1Bdd2AA67e272F2"; // deployed on BSC mainnet — deploy tx 0x0974b1a88a0a5a707dc90e89a7b38ae3d083ed9bf96d12b495787d5125b8ac81, owner 0xDAee9eF06d9f51254DDdcd592eF53A3BF1836383
+var AGENT_ID_ADDRESS = "0x60B9262456dE011F7d15a54CdD8c48bAaa8B022F";
+var BSC_RPC_URL = "https://bsc-dataseed.binance.org";
+var BSC_CHAIN_ID = 56;
+
+var AGENT_ID_ABI = ["function balanceOf(address owner) view returns (uint256)"];
+var MINT_GUARDIAN_ABI = [{"inputs": [{"internalType": "address", "name": "_agentIdRegistry", "type": "address"}], "stateMutability": "nonpayable", "type": "constructor"}, {"inputs": [], "name": "AlreadyEndorsed", "type": "error"}, {"inputs": [], "name": "AlreadyReported", "type": "error"}, {"inputs": [], "name": "EmptyName", "type": "error"}, {"inputs": [], "name": "InvalidVerdict", "type": "error"}, {"inputs": [], "name": "NotAgentHolder", "type": "error"}, {"inputs": [], "name": "NotOwner", "type": "error"}, {"inputs": [], "name": "PausedContract", "type": "error"}, {"inputs": [], "name": "ReportNotFound", "type": "error"}, {"inputs": [], "name": "SelfEndorse", "type": "error"}, {"inputs": [], "name": "ZeroAddress", "type": "error"}, {"anonymous": false, "inputs": [{"indexed": true, "internalType": "uint256", "name": "reportId", "type": "uint256"}, {"indexed": true, "internalType": "address", "name": "endorser", "type": "address"}], "name": "Endorsed", "type": "event"}, {"anonymous": false, "inputs": [{"indexed": true, "internalType": "address", "name": "previousOwner", "type": "address"}, {"indexed": true, "internalType": "address", "name": "newOwner", "type": "address"}], "name": "OwnershipTransferred", "type": "event"}, {"anonymous": false, "inputs": [{"indexed": true, "internalType": "address", "name": "by", "type": "address"}], "name": "Paused", "type": "event"}, {"anonymous": false, "inputs": [{"indexed": true, "internalType": "uint256", "name": "reportId", "type": "uint256"}, {"indexed": true, "internalType": "address", "name": "mintContract", "type": "address"}, {"indexed": true, "internalType": "address", "name": "reporter", "type": "address"}, {"indexed": false, "internalType": "enum MintGuardian.Verdict", "name": "verdict", "type": "uint8"}], "name": "ReportSubmitted", "type": "event"}, {"anonymous": false, "inputs": [{"indexed": true, "internalType": "address", "name": "by", "type": "address"}], "name": "Unpaused", "type": "event"}, {"inputs": [], "name": "agentIdRegistry", "outputs": [{"internalType": "address", "name": "", "type": "address"}], "stateMutability": "view", "type": "function"}, {"inputs": [{"internalType": "uint256", "name": "reportId", "type": "uint256"}], "name": "endorse", "outputs": [], "stateMutability": "nonpayable", "type": "function"}, {"inputs": [{"internalType": "uint256", "name": "reportId", "type": "uint256"}], "name": "getReport", "outputs": [{"components": [{"internalType": "address", "name": "mintContract", "type": "address"}, {"internalType": "string", "name": "name", "type": "string"}, {"internalType": "enum MintGuardian.Verdict", "name": "verdict", "type": "uint8"}, {"internalType": "string", "name": "evidenceURI", "type": "string"}, {"internalType": "address", "name": "reporter", "type": "address"}, {"internalType": "uint256", "name": "createdAt", "type": "uint256"}, {"internalType": "uint256", "name": "endorsements", "type": "uint256"}], "internalType": "struct MintGuardian.Report", "name": "", "type": "tuple"}], "stateMutability": "view", "type": "function"}, {"inputs": [{"internalType": "uint256", "name": "reportId", "type": "uint256"}, {"internalType": "address", "name": "endorser", "type": "address"}], "name": "hasEndorsed", "outputs": [{"internalType": "bool", "name": "", "type": "bool"}], "stateMutability": "view", "type": "function"}, {"inputs": [{"internalType": "address", "name": "reporter", "type": "address"}, {"internalType": "address", "name": "mintContract", "type": "address"}], "name": "hasReported", "outputs": [{"internalType": "bool", "name": "", "type": "bool"}], "stateMutability": "view", "type": "function"}, {"inputs": [{"internalType": "address", "name": "account", "type": "address"}], "name": "isAgentHolder", "outputs": [{"internalType": "bool", "name": "", "type": "bool"}], "stateMutability": "view", "type": "function"}, {"inputs": [], "name": "owner", "outputs": [{"internalType": "address", "name": "", "type": "address"}], "stateMutability": "view", "type": "function"}, {"inputs": [], "name": "pause", "outputs": [], "stateMutability": "nonpayable", "type": "function"}, {"inputs": [], "name": "paused", "outputs": [{"internalType": "bool", "name": "", "type": "bool"}], "stateMutability": "view", "type": "function"}, {"inputs": [{"internalType": "address", "name": "mintContract", "type": "address"}], "name": "reportsByMint", "outputs": [{"internalType": "uint256[]", "name": "", "type": "uint256[]"}], "stateMutability": "view", "type": "function"}, {"inputs": [], "name": "reportsCount", "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}], "stateMutability": "view", "type": "function"}, {"inputs": [{"internalType": "address", "name": "mintContract", "type": "address"}, {"internalType": "string", "name": "name", "type": "string"}, {"internalType": "uint8", "name": "verdict", "type": "uint8"}, {"internalType": "string", "name": "evidenceURI", "type": "string"}], "name": "submitReport", "outputs": [{"internalType": "uint256", "name": "reportId", "type": "uint256"}], "stateMutability": "nonpayable", "type": "function"}, {"inputs": [{"internalType": "address", "name": "newOwner", "type": "address"}], "name": "transferOwnership", "outputs": [], "stateMutability": "nonpayable", "type": "function"}, {"inputs": [], "name": "unpause", "outputs": [], "stateMutability": "nonpayable", "type": "function"}];
+
+/* ================= SEED DATA (curated, receipt-verified) ================= */
+var SEED_REPORTS = [{"mintContract": "0x4158b701eaa30e8fadbaa526f70780a38318c1c4", "name": "FIND", "verdict": "safe", "verdictCode": 0, "reason": "Free answer-gated quiz mint for Agent ID holders. Sourcify exact_match, Binance audit LOW, preview clean with value 0.", "txHash": "0xe5ac858344407400d18683afdbe43bee1fcf906d95fedbbbae72d60ce15575c6", "mintedAt": "2026-11-18T04:04:53+00:00", "source": "seed"}, {"mintContract": "0xff172b79d040faefa1bf34b47151edc87130246e", "name": "SNIP", "verdict": "safe", "verdictCode": 0, "reason": "Free answer-gated round mint for Agent ID holders. Price 0 on-chain, Sourcify exact_match, clean preview, receipt verified.", "txHash": "0xaa57226f908fa2c8ae3f58ceb5c472ae9a1fa13fbc7d234d9be47dc5e8eeca75", "mintedAt": "2026-11-18T14:32:05.822751+05:30", "source": "seed"}, {"mintContract": "0x38c1695eb72b7522c8d6452a4ce27122532a0d69", "name": "REMNANT", "verdict": "safe", "verdictCode": 0, "reason": "Free answer-gated round mint for Agent ID holders. Price 0 on-chain, Sourcify exact_match, clean preview, receipt verified.", "txHash": "0x62481af35cc883196a4afb02b1e825bf3326ecfaa6b9a6be72c8898ae018ffe3", "mintedAt": "2026-11-18T14:32:16.227845+05:30", "source": "seed"}, {"mintContract": "0x639329f5dc4317c44D9Fed961a1217ba845012F7", "name": "SPEC", "verdict": "safe", "verdictCode": 0, "reason": "Free answer-gated experiment mint for Agent ID holders. Sourcify exact_match, Binance audit LOW, preview clean with value 0. Pre-liquidity lottery ticket \u2014 no DEX pool yet, value unproven.", "txHash": "0x241b81b386fb2383398267ae98c9530de6d26c4c75756cb905dd00c2d8a666b4", "mintedAt": "2026-11-16T06:05:00+05:30", "source": "seed"}, {"mintContract": "0x58e8f1b34B60687B36BCdc78e02a2fd443De71Ab", "name": "PXIO Miners", "verdict": "safe", "verdictCode": 0, "reason": "Free first mint for Agent ID holders; Scribe tier earns 19 $PXIO per hour with a 150 PXIO storage cap. Sourcify exact_match, Binance audit LOW, $PXIO has a live PancakeSwap pool.", "txHash": "0x24a831d13e54fe0e7d0d01b636a58939e2878d0efbaee10981e68675bd9ca16c", "mintedAt": "2026-11-17T16:25:00+05:30", "source": "seed"}, {"mintContract": "0xa804bBBe09fa2F5832d11D09329cc4230D1d7899", "name": "THE WALL", "verdict": "safe", "verdictCode": 0, "reason": "Free mint taken on a one-time manual override; contract unverified, treat as higher-risk safe. Official site config names this contract and the mint was free with value 0.", "txHash": "0xcb58abf992f33f954b3e7bdf063e60e84b7fe25599c5da9d7f91dd0d2b5dd7c4", "mintedAt": "2026-11-18T07:58:00+05:30", "source": "seed"}, {"mintContract": "0x1fccfab61461c4b5c4d1b16580d12a7e32012baa", "name": "Goblin Miner", "verdict": "safe", "verdictCode": 0, "reason": "Free miner mint for Agent ID holders; earns $MINE per hour with a 150 $MINE storage cap per wallet. Sourcify exact_match, Binance audit LOW, preview clean.", "txHash": "0xbb39872fbf21ef86ca703cb1cad1457694c4fdf294d650b4554eb0dd8002dc4e", "mintedAt": "2026-11-18T08:47:00+05:30", "source": "seed"}, {"mintContract": "0xba7068233da805bdebcc167be361c219002e6b7f", "name": "STOCK AGENT", "verdict": "safe", "verdictCode": 0, "reason": "Free mint of 2 (full per-wallet quota) for Agent ID holders. Sourcify exact_match, Binance audit LOW, preview clean with value 0.", "txHash": "0x6247ceb6d604ba8fd8017ab0a5826ee9b4877d2bf307afaa73eda60a9b85530f", "mintedAt": "2026-11-18T09:00:21+05:30", "source": "seed"}, {"mintContract": "0xaD0D78689D047Bb9a32F5Bf93438373a73dA68Ec", "name": "Vitaliq Scans", "verdict": "safe", "verdictCode": 0, "reason": "Free Genesis Reading 1 scan mint for Agent ID holders. Sourcify exact_match, Binance audit LOW, price 0 on-chain. The $VITAL claim for sealed scans is a separate paid claim and was not taken.", "txHash": "0x4ee61424b576f507c44968befa9babeffcd013c226311a733497492154fc41b8", "mintedAt": "2026-11-18T04:15:18+00:00", "source": "seed"}, {"mintContract": "0x26441dAfe9b256345a2859C28c91E24611ED424A", "name": "Ascension Catty", "verdict": "safe", "verdictCode": 0, "reason": "Free mint of 2 (full per-Agent-ID quota) for Agent ID holders. Sourcify exact_match, Binance audit LOW, preview clean with value 0.", "txHash": "0x7a8ca05aaa21a275349cf13a7fb8f38e80580ae8887c8a94c1d68e3a8b20ba7a", "mintedAt": "2026-11-18T04:36:00+00:00", "source": "seed"}, {"mintContract": "0xD612Ded8F2b4818c0A9d2465f06eBf1B745f0E17", "name": "Swarm Agent", "verdict": "safe", "verdictCode": 0, "reason": "Free mint for Agent ID holders. Sourcify exact_match, Binance audit LOW, mint price 0 on-chain, preview clean.", "txHash": "0x84d211fea7432be2011ba01b15e534efaca82d5d45f434162ee8a58697a47de5", "mintedAt": "2026-11-18T14:20:00+05:30", "source": "seed"}, {"mintContract": "0x7dF7fD03bD5b7a024B1341849AaD14758f12a4A8", "name": "DinoAgent", "verdict": "safe", "verdictCode": 0, "reason": "Free egg mint via claimFree() for Agent ID holders. Sourcify exact_match, Binance audit LOW, preview clean with value 0.", "txHash": "0x2b5d93810a7fb4987fffc59a44b7eb4feb9ec390626f45c804b2be2f07a107e8", "mintedAt": "2026-11-18T14:20:00+05:30", "source": "seed"}, {"mintContract": "0xd52fd117c4b47d03e4e16e778871f09faa5a024b", "name": "First-Dollar Sparks", "verdict": "safe", "verdictCode": 0, "reason": "Free mint: one Sparks NFT plus 10,000 $SPARK in the same transaction. Sourcify exact_match, preview clean with value 0. Pre-liquidity lottery ticket \u2014 no DEX pool yet, value unproven.", "txHash": "0x03c2c628f9a6ea5cb3c1bc0788a146b01d82561d7c9fef63d5bd0a9f9e12433d", "mintedAt": "2026-11-18T12:07:56.480808+05:30", "source": "seed"}, {"mintContract": "0xa34c9d34b2ee93b8059d0ed5302ae595c446423d", "name": "AgentPepe", "verdict": "safe", "verdictCode": 0, "reason": "Free lane mint for Agent ID holders; the quiz answer was verified on-chain before minting. Sourcify exact_match, preview clean with value 0. The $APEPE token claim costs 0.00024 BNB per tokenId and is paid, not free.", "txHash": "0xa275305c530b65dad2c0ab529197e8f3499b19fb0eed1b067343b5ab9eaa9012", "mintedAt": "2026-11-17T19:03:24+05:30", "source": "seed"}, {"mintContract": "0x08b1323a74530bedd2188b458ebcc856315d8e0f", "name": "ContextGraph", "verdict": "safe", "verdictCode": 0, "reason": "Free Node mint for Agent ID holders; answer verified on-chain, price 0. Sourcify exact_match, preview clean with value 0. The $CTX token claim carries a small BNB fee and was not auto-claimed.", "txHash": "0x4b8d7cd2fd4c9a893d5a124d1fd5d2ef23ada00957ebffe5108c80d1f0bdfc65", "mintedAt": "2026-11-17T22:08:52+05:30", "source": "seed"}, {"mintContract": "0xf8a72c4538cd9d570b2c771f01a0d561a90a64eb", "name": "Mine Card", "verdict": "safe", "verdictCode": 0, "reason": "Free first card mint for Agent ID holders. Sourcify exact_match, mint price 0 on-chain, preview clean with value 0.", "txHash": "0xdd2a2a2a6952d6dcb4f4c72f0b9c4b8d5bb636a382c538eaa8ff9fc1be093c9e", "mintedAt": "2026-11-17T22:08:36+05:30", "source": "seed"}, {"mintContract": "0x1d4Ef0587dD3FF3875a141D4711C60BcA40587C4", "name": "Punch Card", "verdict": "safe", "verdictCode": 0, "reason": "Free first card mint for Agent ID holders. Project identity confirmed on punchin.fun; preview clean with value 0.", "txHash": "0x563fba1ee7d1da3d43bb3483b0426f26adc1a697f1cb8880706d08cf8efa53e7", "mintedAt": "2026-11-18T02:51:21+05:30", "source": "seed"}, {"mintContract": "0xb37fb29644e5c7C7D3e554aa2b0bbaE6dD7970c5", "name": "Agent Miner", "verdict": "safe", "verdictCode": 0, "reason": "Free mint via mintFree() for Agent ID holders. Sourcify exact_match, Binance audit LOW, preview clean with value 0. Pre-liquidity lottery ticket \u2014 no DEX pool yet, value unproven.", "txHash": "0x1d1cc2cc4a34201c4f1db4eabfb34883f512aa30b6a96fec56cbc1e8ffa83b0f", "mintedAt": "2026-11-18T02:51:21+05:30", "source": "seed"}, {"mintContract": "0xf5767ac3beb8bbfaf4596dfc1925fc5aca779dcb", "name": "Alien", "verdict": "safe", "verdictCode": 0, "reason": "Free first mint for Agent ID holders in the free phase. Sourcify exact_match, preview clean with value 0.", "txHash": "0xb1ae8faede21d2f720b5609376483496be43c80ee36595c883973c6d15082c20", "mintedAt": "2026-11-18T03:00:21+05:30", "source": "seed"}, {"mintContract": "0xff2dac2389a6a9593209b6008d5ffa9e73aa19c2", "name": "AgentEcho", "verdict": "safe", "verdictCode": 0, "reason": "Free mint for Agent ID holders. Sourcify exact_match, Binance audit LOW, preview clean with value 0.", "txHash": "0x1d7d3548f433744a088898acc4f51ca81edc8c2c5832277ca1bf859b9fcec297", "mintedAt": "2026-11-18T03:29:58+05:30", "source": "seed"}, {"mintContract": "0xEcBd1e3e415427c11873BED75042a2E5Ef0f88a0", "name": "1% Club", "verdict": "safe", "verdictCode": 0, "reason": "Free lane puzzle mint for Agent ID holders; the round clue was verified on-chain before minting. Preview clean with value 0.", "txHash": "0x871ef6dd2b87597c13a23b1138efc39b504af301e9e58c60a125234453759b6a", "mintedAt": "2026-11-17T22:35:00+05:30", "source": "seed"}, {"mintContract": "0x5898AD3b7578BF244F9940e860A1051647996633", "name": "EmberPoW", "verdict": "safe", "verdictCode": 0, "reason": "Daily free wood claim for Agent ID holders; the proof-of-work solution was verified on-chain. Price 0, preview clean with value 0.", "txHash": "0xdb77fa5f4d5d0440ab042a5ba731541fe59841611ac38ebef4cd3d334d403bdf", "mintedAt": "2026-11-17T22:35:00+05:30", "source": "seed"}, {"mintContract": "0xacf150d9ec909e3d339bf4c6d090b18495674e66", "name": "Agent Harvest", "verdict": "safe", "verdictCode": 0, "reason": "Free land mint in a timed phase window for Agent ID holders. Binance audit LOW and clean, preview clean with value 0.", "txHash": "0x3d9561502c567484072c6d48256bec3cec3002e12f56a4f86f35d188220cc09a", "mintedAt": "2026-11-01T20:14:28.615673", "source": "seed"}, {"mintContract": "0xFF8BfeF2c0d16BDa6E8667812bCa35Ecb42A1a37", "name": "Agent Zet", "verdict": "safe", "verdictCode": 0, "reason": "Free first mint for Agent ID holders. Sourcify exact_match, Binance audit LOW, mint source read to confirm the first mint is free.", "txHash": "0x5ec0ad16c312ead72a02c7f100f824ab2cc3caac22c6fa9e263152e24ea54ab8", "mintedAt": "2026-11-02T09:40:00+05:30", "source": "seed"}, {"mintContract": "0xE97c8944D638e5F65D595f2dEe2f1aC211235dD0", "name": "Cointris", "verdict": "safe", "verdictCode": 0, "reason": "Daily free mint for Agent ID holders. Sourcify exact_match, Binance audit LOW, on-chain mint open and Agent ID held.", "txHash": "0x64fae8ebaeac3842ac4f192360d64b47a1315add7c057317ecf319bc941251c3", "mintedAt": "2026-11-17T19:57:57.061508+05:30", "source": "seed"}, {"mintContract": "0x3aeda314ec05bc22e3c26a543e16df2b8cc8fe69", "name": "Agent Cosmos", "verdict": "safe", "verdictCode": 0, "reason": "Free mint for Agent ID holders. Sourcify exact_match, Binance audit LOW, mint open on-chain, preview clean with value 0.", "txHash": "0x30916d068f5c2f0d3b79444c3be9a5ed4ed5352ccc0b08f2ed5d45fc6473778c", "mintedAt": "2026-11-02T06:01:00+05:30", "source": "seed"}, {"mintContract": "0x48c977d13ef156475F086F907D8da9583E1E072E", "name": "Hachiko", "verdict": "safe", "verdictCode": 0, "reason": "Free mint for Agent ID holders within the 1,000 free cap. Sourcify exact_match, Binance audit LOW, preview clean with value 0.", "txHash": "0xf16edf4a00fafc84b9cc91d252364005dc9f1d13abef6b629ac2937652d2183b", "mintedAt": "2026-11-02T05:37:00+05:30", "source": "seed"}, {"mintContract": "0x9395e207F9928657237DE96ffB12340094c073cd", "name": "NULLSECTOR", "verdict": "safe", "verdictCode": 0, "reason": "Free mint for Agent ID holders; the free 1-per-wallet rule is immutable in the contract code. Sourcify exact_match, Binance audit LOW, preview clean.", "txHash": "0x01a5a1294d37f8f3eeab865f1a520644907a875a568b7447c5fcf401a5009aa1", "mintedAt": "2026-11-02T03:12:00+05:30", "source": "seed"}, {"mintContract": "0xf0f21795bed7761e41bc5ed052ba551263d50450", "name": "Agent Wars", "verdict": "safe", "verdictCode": 0, "reason": "Free puzzle mint for Agent ID holders; the proof-of-work was solved and verified on-chain. Sourcify exact_match, Binance audit LOW, preview clean.", "txHash": "0x23a9b62dd7b9e53fa096aae2521bc3d62c14f1497aa49d5f752a330607ebd525", "mintedAt": "2026-11-02T15:13:00+05:30", "source": "seed"}, {"mintContract": "0xaFAE0Bf373ad87E88555afe1605111F66C99062C", "name": "PUNNY", "verdict": "safe", "verdictCode": 0, "reason": "Free mint, 1 per Agent ID. Sourcify exact_match, Binance audit LOW, value 0. Each NFT claims 40,000 $PUNNY at mint close \u2014 pre-liquidity lottery ticket, no DEX pool yet, value unproven.", "txHash": "0xee672823b67c9a150204e4a0ce48549e29f855e8a0830fe9f3c532883165d6c3", "mintedAt": "2026-11-18T00:46:16+05:30", "source": "seed"}, {"mintContract": "0x851A20E8F1B0BBE90B41350412f77781bB96122f", "name": "WARCoin", "verdict": "risky", "verdictCode": 1, "reason": "Audit MID. Non-standard ERC20 (no approve/transferFrom), retained admin, 2/3 of any BNB sent goes to a hardcoded creator treasury. Free mint itself is gas-only but contract is non-standard \u2014 skipped.", "txHash": null, "mintedAt": null, "source": "seed"}, {"mintContract": "0x979A49C2fBFa9DEd4bC308de2f54C0E99412A0A4", "name": "GhostyPepe", "verdict": "risky", "verdictCode": 1, "reason": "Advertised as free, but on-chain mint price is 0.001 BNB \u2014 paid, not free.", "txHash": null, "mintedAt": null, "source": "seed"}, {"mintContract": "0xF02D42B524DeD4a6397600586Db5a0b9F6cE5447", "name": "Agent Ape", "verdict": "risky", "verdictCode": 1, "reason": "Advertised as free, but on-chain price is 0.002 BNB \u2014 paid.", "txHash": null, "mintedAt": null, "source": "seed"}, {"mintContract": "0x2024ad1Fd9ef794fbDcf93B7A1A6c5900055bA14", "name": "LemurBSC", "verdict": "risky", "verdictCode": 1, "reason": "Advertised as free, but price per share is 0.002 BNB \u2014 paid.", "txHash": null, "mintedAt": null, "source": "seed"}, {"mintContract": "0x8EcaFBA8Bf911698C13D5f14D7b7241f4F80BE5B", "name": "MOLT", "verdict": "risky", "verdictCode": 1, "reason": "Sourcify 404 (unverified). Quality gate: unverified contract \u2014 automatic reject, skipped.", "txHash": null, "mintedAt": null, "source": "seed"}, {"mintContract": "0x5dB3c0Bef60191Fce3169a0d2a4c7ed4438C7C3e", "name": "BNBGems", "verdict": "risky", "verdictCode": 1, "reason": "Sourcify 404 (unverified). Quality gate: unverified contract \u2014 automatic reject, even though the audit was LOW.", "txHash": null, "mintedAt": null, "source": "seed"}, {"mintContract": "0xcf45210247aFBbDbEF4BFE8d5DbAFd2183F1E67e", "name": "AgentsPunks", "verdict": "risky", "verdictCode": 1, "reason": "Sourcify 404 (unverified). Quality gate: unverified contract \u2014 automatic reject, skipped.", "txHash": null, "mintedAt": null, "source": "seed"}, {"mintContract": "0x69e85a43e731895aba318f106537ffef2824beb6", "name": "Super Dino", "verdict": "risky", "verdictCode": 1, "reason": "Binance audit riskLevel MID. Quality gate: audit not clean \u2014 skipped.", "txHash": null, "mintedAt": null, "source": "seed"}, {"mintContract": "0x544aC5e9F1e853800116eFFf1CB9f8fb0B6E8f10", "name": "MegaBull", "verdict": "risky", "verdictCode": 1, "reason": "Contract unverified (Sourcify no match), Binance audit riskLevel MID. Fails the quality gate \u2014 skipped.", "txHash": null, "mintedAt": null, "source": "seed"}, {"mintContract": null, "name": "Grokiefun", "verdict": "scam", "verdictCode": 2, "reason": "Flagged as a wallet-drainer scam (fake SOL/USDC). No verified contract \u2014 do not interact.", "txHash": null, "mintedAt": null, "source": "seed"}];
+
+/* ================= STATE ================= */
+var readProvider = null;
+var wallet = { address: null, signer: null, isHolder: null };
+var registryReports = [];
+var activeFilter = "all";
+
+function $(id){ return document.getElementById(id); }
+function shortAddr(a){ return a ? a.slice(0,6) + "…" + a.slice(-4) : ""; }
+function isValidAddress(a){ return /^0x[0-9a-fA-F]{40}$/.test((a||"").trim()); }
+function verdictName(code){ return ["safe","risky","scam"][Number(code)] || "safe"; }
+function fmtDate(iso){
+  if(!iso) return null;
+  var d = new Date(iso);
+  if(isNaN(d.getTime())) return null;
+  return d.toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});
+}
+function esc(s){
+  return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){
+    return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+  });
+}
+function getReadProvider(){
+  if(readProvider) return readProvider;
+  if(window.ethers){ readProvider = new ethers.JsonRpcProvider(BSC_RPC_URL); return readProvider; }
+  return null;
+}
+
+/* Raw JSON-RPC fallback (used if the ethers CDN is unreachable) */
+function rpcCall(method, params){
+  return fetch(BSC_RPC_URL, {method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({jsonrpc:"2.0", id:1, method:method, params:params})})
+    .then(function(r){ return r.json(); })
+    .then(function(j){ if(j.error) throw new Error(j.error.message || "RPC error"); return j.result; });
+}
+function balanceOfViaRpc(address){
+  var data = "0x70a08231" + "000000000000000000000000" + address.slice(2).toLowerCase();
+  return rpcCall("eth_call", [{to: AGENT_ID_ADDRESS, data: data}, "latest"])
+    .then(function(hex){ return parseInt(hex, 16); });
+}
+function balanceOf(address){
+  var p = getReadProvider();
+  if(p){
+    var c = new ethers.Contract(AGENT_ID_ADDRESS, AGENT_ID_ABI, p);
+    return c.balanceOf(address).then(function(b){ return Number(b); });
+  }
+  return balanceOfViaRpc(address);
+}
+
+/* ================= RPC LIVENESS ================= */
+function pingRpc(){
+  var done = function(block){
+    $("rpcDot").className = "dot live";
+    $("rpcStatus").textContent = "BSC RPC live · block #" + Number(block).toLocaleString("en-IN");
+  };
+  var fail = function(){
+    $("rpcDot").className = "dot err";
+    $("rpcStatus").textContent = "BSC RPC unreachable — checks will retry on demand";
+  };
+  var p = getReadProvider();
+  if(p){ p.getBlockNumber().then(done).catch(function(){ rpcCall("eth_blockNumber", []).then(function(h){ done(parseInt(h,16)); }).catch(fail); }); }
+  else { rpcCall("eth_blockNumber", []).then(function(h){ done(parseInt(h,16)); }).catch(fail); }
+}
+
+/* ================= AGENT ID CHECK ================= */
+function renderCheckLoading(addr){
+  var el = $("checkResult");
+  el.className = "result show not";
+  el.innerHTML = "<b class='big'>Checking BSC…</b><p style='margin:6px 0 0'>Reading <span class='mono'>balanceOf</span> for <span class='mono'>" + esc(addr) + "</span> from the public RPC.</p>";
+}
+function checkAgentId(addr){
+  addr = (addr || "").trim();
+  if(!isValidAddress(addr)){
+    var el = $("checkResult");
+    el.className = "result show error";
+    el.innerHTML = "<b class='big'>That is not a valid BSC address.</b><p style='margin:6px 0 0'>Paste a full 0x address (42 characters) and try again.</p>";
+    return Promise.resolve(null);
+  }
+  renderCheckLoading(addr);
+  return balanceOf(addr).then(function(bal){
+    var holder = bal > 0;
+    var el = $("checkResult");
+    el.className = "result show " + (holder ? "holder" : "not");
+    el.innerHTML =
+      "<b class='big'>" + (holder ? "✓ Agent ID holder" : "No Agent ID found") + "</b>" +
+      "<dl class='kv'>" +
+      "<dt>Address</dt><dd class='mono'>" + esc(addr) + "</dd>" +
+      "<dt>Agent ID balance</dt><dd>" + bal + " (live from BSC, block-checked just now)</dd>" +
+      "<dt>Can submit / endorse</dt><dd>" + (holder ? "Yes — this wallet passes the holder gate on the live MintGuardian registry." : "No — submitting and endorsing are gated to Agent ID holders.") + "</dd>" +
+      "<dt>Agent ID contract</dt><dd><a href='https://bscscan.com/address/" + AGENT_ID_ADDRESS + "' target='_blank' rel='noopener'>View Agent ID on BscScan</a></dd>" +
+      "</dl>";
+    if(wallet.address && wallet.address.toLowerCase() === addr.toLowerCase()){ wallet.isHolder = holder; updateWalletPill(); updateSubmitGate(); }
+    return holder;
+  }).catch(function(err){
+    var el = $("checkResult");
+    el.className = "result show error";
+    el.innerHTML = "<b class='big'>The live check failed.</b><p style='margin:6px 0 0'>The BSC public RPC did not answer (" + esc(err && err.message ? err.message : "network error") + "). Check your connection and try again — no result has been guessed or cached.</p>";
+    return null;
+  });
+}
+
+/* ================= WALLET ================= */
+function updateWalletPill(){
+  var pill = $("walletPill");
+  if(!wallet.address){ pill.textContent = "No wallet connected"; return; }
+  pill.textContent = shortAddr(wallet.address) + (wallet.isHolder === true ? " · Agent ID holder ✓" : wallet.isHolder === false ? " · no Agent ID" : "");
+}
+function updateSubmitGate(){
+  var deployed = isValidAddress(MINT_GUARDIAN_ADDRESS);
+  var btn = $("submitBtn"), note = $("submitGateNote");
+  if(!deployed){
+    btn.disabled = true;
+    note.textContent = "The registry address is not configured in this build, so submissions are off.";
+    return;
+  }
+  if(!wallet.address){ btn.disabled = true; note.textContent = "Registry is live. Connect a BSC wallet holding an Agent ID to submit."; return; }
+  if(wallet.isHolder !== true){ btn.disabled = true; note.textContent = "This wallet does not hold an Agent ID — only holders can submit reports."; return; }
+  btn.disabled = false; note.textContent = "You hold an Agent ID — your report will be written to the MintGuardian contract on BSC.";
+}
+function connectWallet(){
+  if(!window.ethereum){ alertInPage("No wallet found in this browser. Install MetaMask or use the Binance Wallet browser, then try again — all reads on this page still work without one."); return; }
+  if(!window.ethers){ alertInPage("The ethers library has not loaded yet. Check your connection and reload the page."); return; }
+  window.ethereum.request({method:"eth_requestAccounts"}).then(function(accounts){
+    if(!accounts || !accounts.length) return null;
+    return window.ethereum.request({method:"eth_chainId"}).then(function(chainId){
+      if(parseInt(chainId,16) !== BSC_CHAIN_ID){
+        return window.ethereum.request({method:"wallet_switchEthereumChain", params:[{chainId:"0x38"}]}).catch(function(){
+          alertInPage("Please switch your wallet to BNB Smart Chain (chain 56) to submit or endorse. Reads already work on any network.");
+        }).then(function(){ return accounts; });
+      }
+      return accounts;
+    });
+  }).then(function(accounts){
+    if(!accounts || !accounts.length) return;
+    var provider = new ethers.BrowserProvider(window.ethereum);
+    return provider.getSigner().then(function(signer){
+      return signer.getAddress().then(function(addr){
+        wallet.address = addr; wallet.signer = signer;
+        $("connectBtn").textContent = "Connected · " + shortAddr(addr);
+        $("checkAddress").value = addr;
+        updateWalletPill();
+        checkAgentId(addr);
+        if(isValidAddress(MINT_GUARDIAN_ADDRESS)) loadRegistryReports();
+      });
+    });
+  }).catch(function(err){
+    alertInPage("Wallet connection was rejected or failed" + (err && err.message ? ": " + err.message : "."));
+  });
+}
+function alertInPage(msg){
+  var el = $("checkResult");
+  el.className = "result show error";
+  el.innerHTML = "<b class='big'>Heads up</b><p style='margin:6px 0 0'>" + esc(msg) + "</p>";
+  el.scrollIntoView({behavior:"smooth", block:"center"});
+}
+if(window.ethereum && window.ethereum.on){
+  window.ethereum.on("accountsChanged", function(accounts){
+    if(accounts && accounts.length){ wallet.address = accounts[0]; wallet.signer = null; wallet.isHolder = null; $("connectBtn").textContent = "Connected · " + shortAddr(accounts[0]); $("checkAddress").value = accounts[0]; updateWalletPill(); checkAgentId(accounts[0]); }
+    else { wallet = {address:null, signer:null, isHolder:null}; $("connectBtn").textContent = "Connect wallet"; updateWalletPill(); updateSubmitGate(); }
+  });
+}
+
+/* ================= REGISTRY (live when deployed) ================= */
+function guardianContract(signerOrProvider){
+  var p = getReadProvider();
+  if(!p) return null;
+  return new ethers.Contract(MINT_GUARDIAN_ADDRESS, MINT_GUARDIAN_ABI, signerOrProvider || p);
+}
+function loadRegistryReports(){
+  if(!isValidAddress(MINT_GUARDIAN_ADDRESS) || !window.ethers) return;
+  var c = guardianContract();
+  if(!c) return;
+  c.reportsCount().then(function(count){
+    var n = Number(count), jobs = [];
+    for(var i = 0; i < n; i++){ (function(id){ jobs.push(c.getReport(id).then(function(r){
+      var ev = (r.evidenceURI || "").trim();
+      var txMatch = ev.match(/bscscan\.com\/tx\/(0x[0-9a-fA-F]{64})/);
+      return { id:id, mintContract:r.mintContract, name:r.name, verdict:verdictName(r.verdict), verdictCode:Number(r.verdict),
+        reason:ev, evidenceUrl:isBareUrl(ev) ? ev : null, reporter:r.reporter, endorsements:Number(r.endorsements),
+        mintedAt:new Date(Number(r.createdAt)*1000).toISOString(), txHash:txMatch ? txMatch[1] : null, source:"registry" };
+    })); })(i); }
+    return Promise.all(jobs);
+  }).then(function(list){
+    if(list){ registryReports = list; renderReports(); updateStats(); }
+  }).catch(function(){ /* registry read failed — seed data stays, nothing faked */ });
+}
+function initRegistry(){
+  var deployed = isValidAddress(MINT_GUARDIAN_ADDRESS);
+  if(deployed){
+    $("registryNotice").classList.add("live");
+    $("registryNoticeText").innerHTML = "MintGuardian registry is live on BSC mainnet at <a class='mono' href='https://bscscan.com/address/" + MINT_GUARDIAN_ADDRESS + "' target='_blank' rel='noopener'>" + MINT_GUARDIAN_ADDRESS + "</a> — on-chain reports below are read directly from the contract, alongside the curated seed history. Deploy tx: <a class='mono' href='https://bscscan.com/tx/0x0974b1a88a0a5a707dc90e89a7b38ae3d083ed9bf96d12b495787d5125b8ac81' target='_blank' rel='noopener'>0x0974b1…b8ac81</a>. Source code <a href='https://bscscan.com/address/" + MINT_GUARDIAN_ADDRESS + "#code' target='_blank' rel='noopener'>verified on BscScan — Exact Match</a>.";
+    $("footerGuardian").textContent = MINT_GUARDIAN_ADDRESS;
+    loadRegistryReports();
+  } else {
+    $("registryNoticeText").textContent = "Registry address is not configured in this build — showing curated seed data only.";
+  }
+  updateSubmitGate();
+}
+
+/* ================= RENDER REPORTS ================= */
+function isBareUrl(s){ return /^https?:\/\/\S+$/.test((s || "").trim()); }
+function allReports(){
+  /* Merge on-chain reports with the curated seed history by mint contract:
+     a project recorded on-chain shows once — seed detail (reason, receipt)
+     plus the live registry entry (endorsements, reporter). */
+  var seedByContract = {}, i, r, key;
+  for(i = 0; i < SEED_REPORTS.length; i++){
+    r = SEED_REPORTS[i];
+    if(r.mintContract) seedByContract[r.mintContract.toLowerCase()] = r;
+  }
+  var usedSeed = {}, out = [];
+  for(i = 0; i < registryReports.length; i++){
+    r = registryReports[i];
+    key = r.mintContract ? r.mintContract.toLowerCase() : null;
+    var seed = key ? seedByContract[key] : null;
+    if(seed){
+      usedSeed[key] = true;
+      out.push({ id:r.id, mintContract:r.mintContract, name:seed.name || r.name,
+        verdict:r.verdict, verdictCode:r.verdictCode,
+        reason:seed.reason, txHash:seed.txHash || r.txHash, evidenceUrl:r.evidenceUrl || null,
+        reporter:r.reporter, endorsements:r.endorsements,
+        mintedAt:seed.mintedAt || r.mintedAt, source:"registry" });
+    } else { out.push(r); }
+  }
+  for(i = 0; i < SEED_REPORTS.length; i++){
+    r = SEED_REPORTS[i];
+    key = r.mintContract ? r.mintContract.toLowerCase() : null;
+    if(key && usedSeed[key]) continue;
+    out.push(r);
+  }
+  return out;
+}
+function isLottery(r){ return /lottery ticket/i.test(r.reason || ""); }
+function reportCard(r){
+  var isSeed = r.source !== "registry";
+  var date = fmtDate(r.mintedAt);
+  var reasonText = (r.reason || "").trim();
+  var evidenceUrl = r.evidenceUrl || null;
+  if(isBareUrl(reasonText)){ evidenceUrl = evidenceUrl || reasonText; reasonText = ""; }
+  if(!reasonText) reasonText = "Recorded in the on-chain MintGuardian registry. Open the evidence link below to verify this verdict on BscScan.";
+  var tx = r.txHash ? "<div>Evidence: <a href='https://bscscan.com/tx/" + esc(r.txHash) + "' target='_blank' rel='noopener'>mint receipt on BscScan ↗</a></div>"
+    : evidenceUrl ? "<div>Evidence: <a href='" + esc(evidenceUrl) + "' target='_blank' rel='noopener'>view on BscScan ↗</a></div>"
+    : (r.verdict === "safe" ? "" : "<div>No mint taken — this one was skipped, so there is no receipt.</div>");
+  var contract = r.mintContract ? "<div>Contract: <a class='mono' href='https://bscscan.com/address/" + esc(r.mintContract) + "' target='_blank' rel='noopener'>" + esc(r.mintContract) + "</a></div>" : "<div>Contract: none verified — that is the point of the warning.</div>";
+  var endorseDisabled = !isValidAddress(MINT_GUARDIAN_ADDRESS);
+  var endorseBtn = isSeed
+    ? "<button class='btn small' type='button' disabled data-endorse>Endorse</button>"
+    : "<button class='btn small' type='button' data-endorse-id='" + r.id + "'>Endorse (" + (r.endorsements || 0) + ")</button>";
+  var endorseNote = endorseDisabled
+    ? "<span class='endorse-note'>Endorsing is unavailable — the registry address is not configured in this build.</span>"
+    : (isSeed ? "<span class='endorse-note'>Seed entries predate the registry — endorsements apply to on-chain reports.</span>" : "<span class='endorse-note'>Requires a connected wallet holding an Agent ID.</span>");
+  return "<article class='report'>" +
+    "<div class='report-top'><h3>" + esc(r.name) + "</h3><div class='badges'>" +
+      "<span class='badge " + esc(r.verdict) + "'>" + esc(r.verdict) + "</span>" +
+      (isSeed ? "<span class='badge seed'>Curated seed</span>" : "<span class='badge registry'>On-chain registry</span>") +
+      (isLottery(r) ? "<span class='badge lottery'>Lottery ticket · pre-liquidity</span>" : "") +
+    "</div></div>" +
+    "<p class='reason'>" + esc(reasonText) + "</p>" +
+    "<div class='meta'>" + contract + tx + (date ? "<div>Recorded: " + esc(date) + "</div>" : "") +
+      (r.reporter ? "<div>Reporter: <a class='mono' href='https://bscscan.com/address/" + esc(r.reporter) + "' target='_blank' rel='noopener'>" + esc(shortAddr(r.reporter)) + "</a></div>" : "") + "</div>" +
+    "<div class='report-foot'>" + endorseBtn + endorseNote + "</div>" +
+  "</article>";
+}
+function renderReports(){
+  var q = ($("searchInput").value || "").toLowerCase().trim();
+  var list = allReports().filter(function(r){
+    if(activeFilter !== "all" && r.verdict !== activeFilter) return false;
+    if(q && (r.name.toLowerCase().indexOf(q) === -1 && (r.mintContract || "").toLowerCase().indexOf(q) === -1)) return false;
+    return true;
+  });
+  $("reportsList").innerHTML = list.map(reportCard).join("");
+  $("reportsEmpty").hidden = list.length > 0;
+  var totalReports = allReports();
+  var onChainCount = totalReports.filter(function(x){ return x.source === "registry"; }).length;
+  $("resultCount").textContent = "Showing " + list.length + " of " + totalReports.length + " reports" + (registryReports.length ? " (" + onChainCount + " recorded in the live on-chain registry, the rest from the curated seed history)" : " (curated seed — no on-chain reports read yet; the live registry is at " + shortAddr(MINT_GUARDIAN_ADDRESS) + ")") + ".";
+  var btns = document.querySelectorAll("[data-endorse-id]");
+  for(var i = 0; i < btns.length; i++){ btns[i].addEventListener("click", function(){ endorseReport(Number(this.getAttribute("data-endorse-id"))); }); }
+}
+function updateStats(){
+  var all = allReports();
+  $("statTotal").textContent = all.length;
+  $("statSafe").textContent = all.filter(function(r){return r.verdict==="safe";}).length;
+  $("statRisky").textContent = all.filter(function(r){return r.verdict==="risky";}).length;
+  $("statScam").textContent = all.filter(function(r){return r.verdict==="scam";}).length;
+}
+
+/* ================= SUBMIT & ENDORSE (live registry only) ================= */
+function setSubmitStatus(msg){ var s = $("submitStatus"); s.textContent = msg; s.className = "status-msg show"; }
+function submitReport(e){
+  e.preventDefault();
+  if(!isValidAddress(MINT_GUARDIAN_ADDRESS)){ setSubmitStatus("The registry address is not configured in this build — nothing was sent."); return; }
+  if(!wallet.signer){ setSubmitStatus("Connect a BSC wallet first."); return; }
+  if(wallet.isHolder !== true){ setSubmitStatus("Only Agent ID holders can submit — this wallet does not hold one."); return; }
+  var mint = $("fContract").value.trim(), name = $("fName").value.trim(),
+      verdict = Number($("fVerdict").value), evidence = $("fEvidence").value.trim();
+  if(!isValidAddress(mint)){ setSubmitStatus("Enter a valid mint contract address."); return; }
+  if(!name){ setSubmitStatus("Give the project a name."); return; }
+  if(!evidence){ setSubmitStatus("Add evidence — a BscScan link and the reason for your verdict."); return; }
+  setSubmitStatus("Sending to MintGuardian on BSC — confirm in your wallet…");
+  var c = guardianContract(wallet.signer);
+  c.submitReport(mint, name, verdict, evidence).then(function(tx){
+    setSubmitStatus("Transaction sent: " + tx.hash + " — waiting for confirmation…");
+    return tx.wait();
+  }).then(function(){
+    setSubmitStatus("Report recorded on-chain. Reloading the registry…");
+    loadRegistryReports(); updateStats();
+  }).catch(function(err){
+    setSubmitStatus("Submission failed" + (err && err.shortMessage ? ": " + err.shortMessage : err && err.message ? ": " + err.message : "."));
+  });
+}
+function endorseReport(id){
+  if(!isValidAddress(MINT_GUARDIAN_ADDRESS)){ return; }
+  if(!wallet.signer){ alertInPage("Connect a BSC wallet holding an Agent ID to endorse on-chain reports."); return; }
+  if(wallet.isHolder !== true){ alertInPage("Only Agent ID holders can endorse — run the check above for this wallet first."); return; }
+  var c = guardianContract(wallet.signer);
+  c.endorse(id).then(function(tx){ return tx.wait(); }).then(function(){ loadRegistryReports(); })
+    .catch(function(err){ alertInPage("Endorse failed" + (err && err.shortMessage ? ": " + err.shortMessage : ".")); });
+}
+
+/* ================= WIRE UP ================= */
+$("connectBtn").addEventListener("click", connectWallet);
+$("checkBtn").addEventListener("click", function(){ checkAgentId($("checkAddress").value); });
+$("checkAddress").addEventListener("keydown", function(e){ if(e.key === "Enter"){ e.preventDefault(); checkAgentId(this.value); } });
+$("submitForm").addEventListener("submit", submitReport);
+$("searchInput").addEventListener("input", renderReports);
+var chips = document.querySelectorAll("[data-filter]");
+for(var i = 0; i < chips.length; i++){
+  chips[i].addEventListener("click", function(){
+    activeFilter = this.getAttribute("data-filter");
+    for(var j = 0; j < chips.length; j++) chips[j].setAttribute("aria-pressed", chips[j] === this ? "true" : "false");
+    renderReports();
+  });
+}
+pingRpc();
+initRegistry();
+updateStats();
+renderReports();
+</script>
+</body>
+</html>
